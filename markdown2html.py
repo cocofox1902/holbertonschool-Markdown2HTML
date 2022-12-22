@@ -1,93 +1,125 @@
 #!/usr/bin/python3
-""" Write a script markdown2html.py that takes an argument 2 strings:
+"""markdown2html.py - A quick & dirty Markdown > HTML compiler"""
 
-First argument is the name of the Markdown file
-Second argument is the output file name """
-
-import re
 import hashlib
-import sys
-import os
+import re
+from sys import argv
+from sys import exit
 
 if __name__ == "__main__":
-    if len(sys.argv) < 3:
-        sys.stderr.write("Usage: ./markdown2html.py README.md README.html\n")
-        exit(1)
-    if not os.path.exists(sys.argv[1]):
-        sys.stderr.write("Missing " + sys.argv[1] + "\n")
-        exit(1)
 
-    with open(sys.argv[1]) as r:
-        with open(sys.argv[2], 'w') as w:
-            change_status = False
-            ordered_status = False
-            paragraph = False
-            for line in r:
-                line = line.replace('**', '<b>', 1)
-                line = line.replace('**', '</b>', 1)
-                line = line.replace('__', '<em>', 1)
-                line = line.replace('__', '</em>', 1)
+    if (len(argv) < 3):
+        exit("Usage: ./markdown2html.py README.md README.html")
 
-                md5 = re.findall(r'\[\[.+?\]\]', line)
-                md5_inside = re.findall(r'\[\[(.+?)\]\]', line)
-                if md5:
-                    line = line.replace(md5[0], hashlib.md5(
-                        md5_inside[0].encode()).hexdigest())
+    if type(argv[1]) is str:
+        try:
+            with open(argv[1], "r") as fp:
+                html = fp.readlines()
+        except IOError:
+            exit("Missing {:s}".format(argv[1]))
 
-                delete_c = re.findall(r'\(\(.+?\)\)', line)
-                remove_c_inside = re.findall(r'\(\((.+?)\)\)', line)
-                if delete_c:
-                    remove_c_inside = ''.join(
-                        c for c in remove_c_inside[0] if c not in 'Cc')
-                    line = line.replace(delete_c[0], remove_c_inside)
+    # Flags for multi-line elements
+    ulFlag = False
+    olFlag = False
+    pFlag = False
 
-                length = len(line)
-                headings = line.lstrip('#')
-                heading_count = length - len(headings)
-                unordered = line.lstrip('-')
-                unordered_count = length - len(unordered)
-                ordered = line.lstrip('*')
-                ordered_count = length - len(ordered)
+    # Main loop
+    for i in range(len(html)):
 
-                if 1 <= heading_count <= 6:
-                    line = '<h{}>'.format(
-                        heading_count) + headings.strip() + '</h{}>\n'.format(
-                        heading_count)
+        # Headings
+        if html[i].strip().startswith("#"):
+            lvl = html[i].split(" ")[0].count("#")
+            content = html[i].split(" ", 1)[1].strip()
+            if lvl <= 6:
+                html[i] = "<h{0}>{1}</h{0}>\n".format(lvl, content)
 
-                if unordered_count:
-                    if not change_status:
-                        w.write('<ul>\n')
-                        change_status = True
-                    line = '<li>' + unordered.strip() + '</li>\n'
-                if change_status and not unordered_count:
-                    w.write('</ul>\n')
-                    change_status = False
+        # Unordered lists
+        if html[i].strip().startswith("- "):
+            content = html[i].split(" ", 1)[1].strip()
+            if not ulFlag:
+                if pFlag:
+                    html[i] = "</p>\n<ul>\n<li>{:s}</li>\n".format(content)
+                else:
+                    html[i] = "<ul>\n<li>{:s}</li>\n".format(content)
+            else:
+                html[i] = "<li>{:s}</li>\n".format(content)
 
-                if ordered_count:
-                    if not ordered_status:
-                        w.write('<ol>\n')
-                        ordered_status = True
-                    line = '<li>' + ordered.strip() + '</li>\n'
-                if ordered_status and not ordered_count:
-                    w.write('</ol>\n')
-                    ordered_status = False
+            ulFlag = True
 
-                if not (heading_count or change_status or ordered_status):
-                    if not paragraph and length > 1:
-                        w.write('<p>\n')
-                        paragraph = True
-                    elif length > 1:
-                        w.write('<br/>\n')
-                    elif paragraph:
-                        w.write('</p>\n')
-                        paragraph = False
+            if i + 1 >= len(html) or not html[i + 1].strip().startswith("- "):
+                html[i] += "</ul>\n"
+                ulFlag = False
 
-                if length > 1:
-                    w.write(line)
+        # Ordered lists
+        if html[i].strip().startswith("* "):
+            content = html[i].split(" ", 1)[1].strip()
+            if not olFlag:
+                if pFlag:
+                    html[i] = "</p>\n<ol>\n<li>{:s}</li>\n".format(content)
+                    pFlag = False
+                else:
+                    html[i] = "<ol>\n<li>{:s}</li>\n".format(content)
+            else:
+                html[i] = "<li>{:s}</li>\n".format(content)
 
-            if ordered_status:
-                w.write('</ol>\n')
-            if paragraph:
-                w.write('</p>\n')
+            olFlag = True
 
-    exit(0)
+            if i + 1 >= len(html) or not html[i + 1].strip().startswith("* "):
+                html[i] += "</ol>\n"
+                olFlag = False
+
+        # Paragraphs
+        if not html[i].strip().startswith("<")\
+                and not re.match(r'\s', html[i]):
+            content = html[i].strip()
+            if not pFlag:
+                html[i] = "<p>\n" + html[i]
+            else:
+                html[i - 1] = html[i - 1].strip() + "<br />\n"
+
+            pFlag = True
+
+            if i + 1 >= len(html) or re.match(r'\s', html[i + 1]):
+                html[i] = html[i].strip() + "\n</p>\n"
+                pFlag = False
+
+        # Bold text
+        if "**" in html[i]:
+            for j in range(int(html[i].count("**") / 2)):
+                boldStart = html[i].index("**")
+                boldStop = html[i].index("**", boldStart + 2)
+                boldText = html[i][boldStart + 2:boldStop]
+                html[i] = html[i].replace(
+                    "**{:s}**".format(boldText), "<b>{:s}</b>".format(boldText))
+
+        # Emphasis
+        if "__" in html[i]:
+            for j in range(int(html[i].count("__") / 2)):
+                emStart = html[i].index("__")
+                emStop = html[i].index("__", emStart + 2)
+                emText = html[i][emStart + 2:emStop]
+                html[i] = html[i].replace("__{:s}__".format(
+                    emText), "<em>{:s}</em>".format(emText))
+
+        # Hash to MD5
+        if "[[" in html[i] and "]]" in html[i]:
+            for j in range(int(html[i].count("[["))):
+                md5Start = html[i].index("[[")
+                md5Stop = html[i].index("]]")
+                md5Text = html[i][md5Start + 2:md5Stop]
+                md5Hash = hashlib.md5(md5Text.encode())
+                html[i] = html[i].replace("[[{:s}]]".format(md5Text),
+                                          str(md5Hash.hexdigest()))
+
+        # Strip the letter c (lower + upper)
+        if "((" in html[i] and "))" in html[i]:
+            for j in range(int(html[i].count("(("))):
+                cStart = html[i].index("((")
+                cStop = html[i].index("))")
+                cText = html[i][cStart + 2:cStop]
+                cLessText = re.sub(r"[cC]", "", cText)
+                html[i] = html[i].replace("(({:s}))".format(cText), cLessText)
+
+    # Write final result to html file
+    with open(argv[2], "w") as output:
+        output.writelines(html)
