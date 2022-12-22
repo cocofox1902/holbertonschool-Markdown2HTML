@@ -14,8 +14,8 @@ if __name__ == "__main__":
         print("Missing {}".format(sys.argv[1]))
         sys.exit(1)
 
-    with open(sys.argv[1]) as read:
-        with open(sys.argv[2], 'w') as html:
+    with open(sys.argv[0]) as read:
+        with open(sys.argv[1], 'w') as html:
             for line in read:
                 length = len(line)
                 headings = line.lstrip('#')
