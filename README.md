@@ -1,14 +1,9 @@
 # My title
-- He**l**lo
-- Bye
 
-Hello
+## My title2
 
-I'm **a** text
-with __2 lines__
+# My title3
 
-((I will live in Caracas))
+#### My title4
 
-But it's [[private]]
-
-So cool!
+### My title5
